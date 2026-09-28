@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GeoRush — Guess the World</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Fraunces:opsz,wght@9..144,600;9..144,800&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0a1620;--panel:rgba(10,22,32,.8);--line:rgba(242,237,226,.14);--paper:#f2ede2;--mut:#93a4ae;--brass:#e0a94a;--coral:#ef6a5b;--sea:#5fb3b3}
+*{margin:0;padding:0;box-sizing:border-box}
+[hidden]{display:none!important}
+body{font-family:'DM Sans',system-ui,Arial,sans-serif;background:var(--ink);color:var(--paper);height:100vh;overflow:hidden}
+button{font-family:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+.glass{background:var(--panel);backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:14px}
+#photo{position:fixed;inset:0;overflow:hidden;background:#0d1d29}
+#photo img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in;transition:transform .5s ease}
+#photo.zoom img{transform:scale(1.9);cursor:zoom-out}
+.shade{position:fixed;inset:0;pointer-events:none;background:linear-gradient(rgba(5,12,18,.7),transparent 24%,transparent 62%,rgba(5,12,18,.7))}
+#loading{position:fixed;inset:0;display:flex;flex-direction:column;gap:14px;align-items:center;justify-content:center;background:var(--ink);z-index:40;color:var(--mut)}
+.spin{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--brass);border-radius:50%;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+header{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;justify-content:space-between;align-items:center;padding:16px 24px;pointer-events:none}
+.logo{font-family:Fraunces,serif;font-weight:800;font-size:26px}
+.logo i{color:var(--brass);font-style:normal}
+.stats{display:flex;gap:10px}
+.stat{padding:8px 16px;min-width:84px}
+.stat small{display:block;color:var(--mut);font-size:12px}
+.stat b{font-size:19px;font-variant-numeric:tabular-nums}
+#barWrap{position:fixed;top:0;left:0;right:0;height:4px;z-index:25;background:rgba(255,255,255,.06)}
+#bar{height:100%;width:100%;background:var(--sea);transition:width 1s linear,background .3s}
+#bar.low{background:var(--coral)}
+.tip{position:fixed;left:24px;bottom:24px;z-index:20;padding:11px 16px;font-size:13px;color:#cbd5da;max-width:330px}
+#mapWrap{position:fixed;right:24px;bottom:24px;width:340px;height:230px;z-index:30;border-radius:18px;overflow:hidden;border:1px solid var(--line);background:#12232f;box-shadow:0 24px 70px rgba(0,0,0,.6);transition:width .3s ease,height .3s ease}
+@media(hover:hover){#mapWrap:hover,#mapWrap.pinned{width:min(780px,56vw);height:min(540px,68vh)}}
+#map{position:absolute;inset:0;background:#12232f}
+.mbtn{position:absolute;top:10px;z-index:1100;padding:7px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--paper);font-size:13px}
+.mbtn:hover{border-color:var(--brass)}
+#layerBtn{left:10px}#pinBtn{left:128px}
+#guessBtn{position:absolute;z-index:1100;left:12px;right:12px;bottom:12px;height:46px;border:none;border-radius:12px;background:var(--brass);color:#1a1205;font-size:16px;font-weight:700}
+#guessBtn:disabled{opacity:.45;cursor:not-allowed;background:#c9d2d6}
+.pin{width:22px;height:22px;border-radius:50%;border:3px solid #fff;box-shadow:0 4px 14px rgba(0,0,0,.5)}
+.pin.g{background:var(--brass)}
+.pin.t{background:var(--coral);animation:pulse 1.6s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(239,106,91,.7)}100%{box-shadow:0 0 0 20px rgba(239,106,91,0)}}
+.card{display:none;position:absolute;z-index:1200;left:50%;bottom:26px;transform:translateX(-50%);width:min(520px,92%);padding:22px 26px;text-align:center}
+.card h2{font-family:Fraunces,serif;font-size:26px}
+.place{color:var(--mut);margin:2px 0 6px}
+.pts{font-family:Fraunces,serif;font-weight:800;font-size:58px;line-height:1.1;color:var(--brass);font-variant-numeric:tabular-nums}
+.dist{color:#cbd5da;margin-bottom:12px}
+.meter{height:6px;border-radius:6px;background:rgba(255,255,255,.1);margin-bottom:16px;overflow:hidden}
+.meter div{height:100%;width:0;background:var(--brass);transition:width .9s ease}
+.cta{width:100%;padding:14px;border:none;border-radius:12px;background:var(--paper);color:var(--ink);font-size:15px;font-weight:700}
+#mapWrap.reveal{inset:0;width:100%;height:100%;border-radius:0;border:none}
+#mapWrap.reveal .card{display:block}
+#mapWrap.reveal #guessBtn,#mapWrap.reveal #pinBtn{display:none}
+.overlay{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;text-align:center;background:radial-gradient(ellipse at 50% 30%,#12303f,var(--ink) 70%)}
+.box{width:min(560px,92%)}
+.overlay h1{font-family:Fraunces,serif;font-weight:800;font-size:clamp(48px,9vw,84px);line-height:1}
+.overlay h1 i{color:var(--brass);font-style:normal}
+.overlay p{color:var(--mut);margin:16px 0 28px;font-size:17px;line-height:1.5}
+.big{padding:16px 38px;border:none;border-radius:14px;background:var(--brass);color:#1a1205;font-size:17px;font-weight:700}
+.best{margin-top:18px;color:var(--mut);font-size:14px}
+.total{font-family:Fraunces,serif;font-weight:800;font-size:clamp(64px,14vw,110px);color:var(--brass);line-height:1;margin:12px 0 4px}
+.rank{font-family:Fraunces,serif;font-size:24px}
+.rows{margin:22px 0 26px;text-align:left;max-height:34vh;overflow:auto}
+.row{display:flex;gap:12px;padding:10px 4px;border-bottom:1px solid var(--line);font-size:15px}
+.row span:nth-child(2){color:var(--mut);margin-left:auto}
+.row b{min-width:64px;text-align:right;color:var(--brass)}
+@media(max-width:800px){
+ header{padding:12px 14px}.logo{font-size:20px}.stat{min-width:62px;padding:6px 10px}.stat b{font-size:16px}
+ .tip{display:none}
+ #mapWrap{left:0;right:0;bottom:0;width:100%;height:42vh;border-radius:18px 18px 0 0}
+ #mapWrap.pinned{height:78vh}
+ .card{bottom:16px;padding:16px}.pts{font-size:44px}
+}
+#mapWrap.reveal{inset:0;width:100%;height:100%;border-radius:0}
+</style>
+</head>
+<body>
+
+<div id="photo"><img id="img" alt="Mystery location"></div>
+<div class="shade"></div>
+<div id="barWrap"><div id="bar"></div></div>
+
+<header>
+  <div class="logo">Geo<i>Rush</i></div>
+  <div class="stats">
+    <div class="stat glass"><small>Round</small><b id="round">1/5</b></div>
+    <div class="stat glass"><small>Score</small><b id="score">0</b></div>
+    <div class="stat glass"><small>Time</small><b id="time">45</b></div>
+  </div>
+</header>
+
+<div class="tip glass">Click the photo to zoom. Hover the map to enlarge it. Press Enter to lock in your guess.</div>
+
+<div id="mapWrap">
+  <div id="map"></div>
+  <button class="mbtn" id="layerBtn">🛰️ Satellite</button>
+  <button class="mbtn" id="pinBtn">📌 Keep open</button>
+  <button id="guessBtn" disabled>Drop a pin to guess</button>
+  <div class="card glass">
+    <h2 id="rTitle"></h2>
+    <div class="place" id="rPlace"></div>
+    <div class="pts" id="rPts">+0</div>
+    <div class="dist" id="rDist"></div>
+    <div class="meter"><div id="rMeter"></div></div>
+    <button class="cta" id="nextBtn">Next round</button>
+  </div>
+</div>
+
+<div id="loading"><div class="spin"></div><span>Finding a new place…</span></div>
+
+<div class="overlay" id="intro">
+  <div class="box">
+    <h1>Geo<i>Rush</i></h1>
+    <p>Look at the photo, find the place on the world map, and score up to 5,000 points per round. Five rounds, 45 seconds each.</p>
+    <button class="big" id="startBtn">Start game</button>
+    <div class="best" id="bestIntro"></div>
+  </div>
+</div>
+
+<div class="overlay" id="final" hidden>
+  <div class="box">
+    <div class="rank" id="rank"></div>
+    <div class="total" id="total">0</div>
+    <div style="color:var(--mut)">out of 25,000 points</div>
+    <div class="rows" id="rows"></div>
+    <button class="big" id="againBtn">Play again</button>
+    <div class="best" id="bestFinal"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+if(!window.L){$('loading').innerHTML='<span>The map library failed to load. Check your connection and reload.</span>';throw new Error('Leaflet missing')}
+$('loading').hidden=true;
+
+const U=id=>`https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=1800&q=85`;
+const W=f=>`https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(f)}?width=1800`;
+
+/* [name, lat, lng, image] — add your own rows here */
+const LOCS=[
+ ["Paris, France",48.8566,2.3522,U("1502602898657-3e91760cbb34")],
+ ["Tokyo, Japan",35.6762,139.6503,U("1540959733332-eab4deabeeaf")],
+ ["New York, USA",40.7128,-74.006,U("1485871981521-5b1fd3805eee")],
+ ["Dubai, UAE",25.2048,55.2708,U("1512453979798-5ea266f8880c")],
+ ["Sydney, Australia",-33.8688,151.2093,U("1506973035872-a4ec16b8e8d6")],
+ ["London, UK",51.5074,-0.1278,U("1513635269975-59663e0ac1ad")],
+ ["Mumbai, India",19.076,72.8777,U("1570168007204-dfb528c6958f")],
+ ["Rio de Janeiro, Brazil",-22.9068,-43.1729,U("1483729558449-99ef09a8c325")],
+ ["Rome, Italy",41.9028,12.4964,U("1529260830199-42c24126f198")],
+ ["Singapore",1.3521,103.8198,U("1525625293386-3f8f99389edd")],
+ ["Taj Mahal, Agra, India",27.1751,78.0421,W("Taj_Mahal_(Edited).jpeg")],
+ ["Machu Picchu, Peru",-13.1631,-72.545,W("80_-_Machu_Picchu_-_Juin_2009_-_edit.2.jpg")],
+ ["Petra, Jordan",30.3285,35.4444,W("Petra_Jordan_BW_21.JPG")],
+ ["Great Wall, China",40.3588,116.02,W("Great_Wall_of_China_July_2006.JPG")],
+ ["Angkor Wat, Cambodia",13.4125,103.867,W("Angkor_Wat.jpg")],
+ ["Easter Island, Chile",-27.1236,-109.2896,W("Moai_Rano_raraku.jpg")],
+ ["Table Mountain, South Africa",-33.9628,18.4098,W("Table_Mountain_DanieVDM.jpg")],
+ ["Matterhorn, Switzerland",45.9763,7.6586,W("Matterhorn_from_Domhütte_-_2.jpg")],
+ ["Giza Pyramids, Egypt",29.9792,31.1342,W("Pyramids_of_the_Giza_Necropolis.jpg")],
+ ["Hagia Sophia, Istanbul",41.0086,28.9802,W("Hagia_Sophia_Mars_2013.jpg")],
+ ["Saint Basil's Cathedral, Moscow",55.7525,37.6231,W("Moscow_July_2011-7a.jpg")],
+ ["Neuschwanstein Castle, Germany",47.5576,10.7498,W("Schloss_Neuschwanstein_2013.jpg")],
+ ["Golden Gate Bridge, San Francisco",37.8199,-122.4783,W("Golden_Gate_Bridge_as_seen_from_Battery_East.jpg")],
+ ["Grand Canyon, USA",36.06,-112.14,W("Grand_Canyon_view_from_Pima_Point_2010.jpg")]
+].map(([name,lat,lng,image])=>({name,lat,lng,image}));
+
+const ROUNDS=5,TIME=45,MAXPTS=5000,DECAY=1800;
+let round=1,total=0,cur,deck=[],hist=[],time=TIME,tmr,state='idle',gm=null,fails=0;
+const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a};
+const pin=c=>L.divIcon({className:'',html:`<div class="pin ${c}"></div>`,iconSize:[22,22],iconAnchor:[11,11]});
+
+/* MAP */
+const map=L.map('map',{zoomControl:false,minZoom:1,worldCopyJump:true,attributionControl:false}).setView([25,10],1);
+L.control.attribution({position:'topright',prefix:false}).addTo(map);
+const streets=L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd',attribution:'© OpenStreetMap © CARTO'});
+const sat=L.layerGroup([
+ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'Tiles © Esri'}),
+ L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd',pane:'shadowPane'})
+]);
+streets.addTo(map);
+const lg=L.layerGroup().addTo(map);
+let isSat=false;
+$('layerBtn').onclick=()=>{
+  isSat=!isSat;
+  if(isSat){map.removeLayer(streets);sat.addTo(map)}else{map.removeLayer(sat);streets.addTo(map)}
+  $('layerBtn').textContent=isSat?'🗺️ Streets':'🛰️ Satellite';
+};
+$('pinBtn').onclick=()=>{
+  const p=$('mapWrap').classList.toggle('pinned');
+  $('pinBtn').textContent=p?'📌 Shrink map':'📌 Keep open';
+};
+new ResizeObserver(()=>map.invalidateSize()).observe($('mapWrap'));
+map.on('click',e=>{
+  if(state!=='play')return;
+  if(gm)gm.setLatLng(e.latlng);else gm=L.marker(e.latlng,{icon:pin('g')}).addTo(lg);
+  $('guessBtn').disabled=false;$('guessBtn').textContent='Lock in guess';
+});
+
+/* PHOTO */
+$('photo').onclick=()=>$('photo').classList.toggle('zoom');
+$('photo').onmousemove=e=>{
+  if($('photo').classList.contains('zoom'))$('img').style.transformOrigin=`${e.clientX/innerWidth*100}% ${e.clientY/innerHeight*100}%`;
+};
+
+/* GAME FLOW */
+function start(){
+  round=1;total=0;hist=[];fails=0;deck=shuffle([...LOCS]);
+  $('score').textContent='0';$('intro').hidden=true;$('final').hidden=true;
+  loadRound();
+}
+function loadRound(){
+  state='load';clearInterval(tmr);lg.clearLayers();gm=null;
+  map.setView([25,10],1);
+  $('mapWrap').classList.remove('reveal');
+  $('photo').classList.remove('zoom');
+  $('round').textContent=`${round}/${ROUNDS}`;
+  $('guessBtn').disabled=true;$('guessBtn').textContent='Drop a pin to guess';
+  $('loading').hidden=false;
+  const tryNext=()=>{
+    if(!deck.length){
+      if(++fails>2){$('loading').innerHTML='<span>Photos could not be loaded. Check your connection and reload.</span>';return}
+      deck=shuffle([...LOCS]);
+    }
+    cur=deck.pop();
+    const im=new Image();let done=false;
+    const skip=()=>{if(!done){done=true;tryNext()}};
+    const wait=setTimeout(skip,6000);
+    im.onload=()=>{if(done)return;done=true;clearTimeout(wait);fails=0;
+      $('img').src=cur.image;$('loading').hidden=true;state='play';map.invalidateSize();startTimer()};
+    im.onerror=()=>{clearTimeout(wait);skip()};
+    im.src=cur.image;
+  };
+  tryNext();
+}
+function startTimer(){
+  clearInterval(tmr);time=TIME;tick();
+  tmr=setInterval(()=>{time--;tick();if(time<=0)submit()},1000);
+}
+function tick(){
+  $('time').textContent=time;
+  $('bar').style.width=(time/TIME*100)+'%';
+  $('bar').classList.toggle('low',time<=10);
+}
+function count(el,to,ms=900){
+  const t0=performance.now();
+  (function f(t){
+    const p=Math.min((t-t0)/ms,1);
+    el.textContent='+'+Math.round(to*(1-Math.pow(1-p,3))).toLocaleString();
+    if(p<1)requestAnimationFrame(f);
+  })(t0);
+}
+const fmt=km=>km<1?`${Math.round(km*1000)} m`:km<100?`${km.toFixed(1)} km`:`${Math.round(km).toLocaleString()} km`;
+
+function submit(){
+  if(state!=='play')return;
+  state='reveal';clearInterval(tmr);
+  const actual=L.latLng(cur.lat,cur.lng);
+  let s=0,d=null;
+  if(gm){d=map.distance(gm.getLatLng(),actual)/1000;s=Math.round(MAXPTS*Math.exp(-d/DECAY))}
+  total+=s;hist.push({name:cur.name,s,d});
+  $('score').textContent=total.toLocaleString();
+  L.marker(actual,{icon:pin('t')}).addTo(lg);
+  const b=[actual];
+  if(gm){
+    b.push(gm.getLatLng());
+    L.polyline([gm.getLatLng(),actual],{color:'#e0a94a',weight:3,opacity:.9,dashArray:'8 8'}).addTo(lg);
+  }
+  $('rTitle').textContent=!gm?"⏱ Time's up":s>4500?'🔥 Pinpoint!':s>3500?'🎯 Excellent':s>2000?'👍 Nice guess':s>500?'🌍 Getting there':'🧭 Way off';
+  $('rPlace').textContent=cur.name;
+  $('rDist').textContent=gm?`${fmt(d)} from the real location`:'You did not place a pin';
+  $('rMeter').style.width='0';
+  $('mapWrap').classList.add('reveal');
+  $('nextBtn').textContent=round>=ROUNDS?'See final score':'Next round';
+  setTimeout(()=>{
+    map.invalidateSize();
+    if(gm)map.fitBounds(L.latLngBounds(b),{paddingTopLeft:[70,90],paddingBottomRight:[70,320],maxZoom:6});
+    else map.setView(actual,4);
+    count($('rPts'),s);
+    $('rMeter').style.width=(s/MAXPTS*100)+'%';
+  },380);
+}
+function next(){
+  if(state!=='reveal')return;
+  if(round>=ROUNDS){showFinal();return}
+  round++;loadRound();
+}
+function getBest(){try{return +localStorage.getItem('georushBest')||0}catch(e){return 0}}
+function showFinal(){
+  const prev=getBest();
+  if(total>prev){try{localStorage.setItem('georushBest',total)}catch(e){}}
+  $('total').textContent=total.toLocaleString();
+  $('rank').textContent=total>=22000?'Cartographer legend':total>=17000?'World traveller':total>=11000?'Seasoned explorer':total>=5000?'Weekend tourist':'Lost but curious';
+  $('rows').innerHTML=hist.map((h,i)=>`<div class="row"><span>${i+1}. ${h.name}</span><span>${h.d==null?'no guess':fmt(h.d)}</span><b>+${h.s.toLocaleString()}</b></div>`).join('');
+  $('bestFinal').textContent=total>prev?'New personal best!':`Personal best: ${prev.toLocaleString()}`;
+  $('final').hidden=false;state='done';
+}
+
+$('guessBtn').onclick=submit;
+$('nextBtn').onclick=next;
+$('startBtn').onclick=start;
+$('againBtn').onclick=start;
+addEventListener('keydown',e=>{
+  if(e.key!=='Enter')return;
+  e.preventDefault();
+  if(!$('intro').hidden||!$('final').hidden)return start();
+  if(state==='reveal')return next();
+  if(state==='play'&&gm)submit();
+});
+const b0=getBest();
+if(b0)$('bestIntro').textContent=`Personal best: ${b0.toLocaleString()}`;
+</script>
+</body>
+</html>
